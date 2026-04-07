@@ -1,48 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import { buildDashboardGroups } from '../services/dashboard'
-import type { PositionEvent, PriceSnapshot, StrategyLeg, StrategyPosition } from '../types/trade'
+import type { StrategyLeg } from '../types/trade'
+import { makePosition, makeSnapshot } from './fixtures'
 
 describe('buildDashboardGroups', () => {
   it('groups positions by account and product', () => {
-    const positions: StrategyPosition[] = [
-      {
+    const positions = [
+      makePosition({
         id: 'a',
         accountType: 'live',
         product: '股指',
         underlyingSymbol: 'IH2509',
         strategyName: '股指多头',
-        openedAt: '2026-04-01',
-        status: 'open',
-        thesis: '',
-        plan: '',
-        expectedScenario: '',
-        reviewResult: '',
-        reviewConclusion: '',
-        tags: [],
-        remarks: '',
-        importNotes: [],
-        createdAt: '2026-04-01T00:00:00.000Z',
-        updatedAt: '2026-04-01T00:00:00.000Z',
-      },
-      {
+      }),
+      makePosition({
         id: 'b',
         accountType: 'paper',
         product: '燃油',
         underlyingSymbol: 'FU2602',
         strategyName: '燃油保护',
-        openedAt: '2026-04-02',
-        status: 'open',
-        thesis: '',
-        plan: '',
-        expectedScenario: '',
-        reviewResult: '',
-        reviewConclusion: '',
-        tags: [],
-        remarks: '',
-        importNotes: [],
-        createdAt: '2026-04-02T00:00:00.000Z',
-        updatedAt: '2026-04-02T00:00:00.000Z',
-      },
+      }),
     ]
 
     const legs: StrategyLeg[] = [
@@ -73,20 +50,17 @@ describe('buildDashboardGroups', () => {
       },
     ]
 
-    const events: PositionEvent[] = []
-    const snapshots: PriceSnapshot[] = [
-      {
+    const snapshots = [
+      makeSnapshot({
         id: 's-a',
         positionId: 'a',
         snapshotAt: '2026-04-05',
         underlyingPrice: 2840,
         legMarks: [{ legId: 'leg-a', markPrice: 2840 }],
-        note: '',
-        createdAt: '2026-04-05T00:00:00.000Z',
-      },
+      }),
     ]
 
-    const groups = buildDashboardGroups(positions, legs, events, snapshots)
+    const groups = buildDashboardGroups(positions, legs, [], snapshots)
 
     expect(groups).toHaveLength(2)
     expect(groups[0].positions).toHaveLength(1)

@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useLiveQuotes } from '../components/LiveQuotesProvider'
 import { useTradeData } from '../components/TradeDataProvider'
 import {
@@ -7,19 +8,39 @@ import {
   getLegCoverage,
 } from '../services/liveQuotes'
 import {
-  formatDate,
   formatDateTime,
   formatMoney,
   formatQuoteCoverage,
 } from '../services/format'
+import type { PriceSnapshot } from '../types/trade'
 
 function today() {
   return new Date().toISOString().slice(0, 10)
 }
 
+type SnapshotDraft = {
+  snapshotAt: string
+  underlyingPrice: string
+  note: string
+  marks: Record<string, string>
+}
+
+function createSnapshotDraft(snapshot: PriceSnapshot | undefined) {
+  return {
+    snapshotAt: snapshot?.snapshotAt.slice(0, 10) ?? today(),
+    underlyingPrice: snapshot?.underlyingPrice != null ? String(snapshot.underlyingPrice) : '',
+    note: snapshot?.note ?? '手动保存正式估值',
+    marks: Object.fromEntries(
+      snapshot?.legMarks.map((mark) => [mark.legId, String(mark.markPrice)]) ?? [],
+    ),
+  }
+}
+
 export function ValuationPage() {
   const [messages, setMessages] = useState<Record<string, string>>({})
-  const { bundle, isLoading, saveSnapshot } = useTradeData()
+  const [editingSnapshotId, setEditingSnapshotId] = useState<string>()
+  const [editDraft, setEditDraft] = useState<SnapshotDraft>()
+  const { bundle, isLoading, saveSnapshot, editSnapshot, removeSnapshot } = useTradeData()
   const {
     health,
     isRefreshing,
@@ -67,6 +88,18 @@ export function ValuationPage() {
     [positions],
   )
 
+  function setPositionMessage(positionId: string, message: string) {
+    setMessages((current) => ({
+      ...current,
+      [positionId]: message,
+    }))
+  }
+
+  function startEditSnapshot(snapshot: PriceSnapshot) {
+    setEditingSnapshotId(snapshot.id)
+    setEditDraft(createSnapshotDraft(snapshot))
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>, positionId: string) {
     event.preventDefault()
 
@@ -96,19 +129,52 @@ export function ValuationPage() {
     })
 
     if (!payload) {
-      setMessages((currentMessages) => ({
-        ...currentMessages,
-        [positionId]: '至少需要一条自动或手动估值数据后才能保存。',
-      }))
+      setPositionMessage(positionId, '至少需要一条自动或手动估值数据后才能保存。')
       return
     }
 
     await saveSnapshot(payload)
+    setPositionMessage(positionId, '正式估值已保存。')
+  }
 
-    setMessages((currentMessages) => ({
-      ...currentMessages,
-      [positionId]: '正式估值已保存。',
-    }))
+  async function handleUpdateSnapshot(positionId: string) {
+    const current = ordered.find((item) => item.position.id === positionId)
+    if (!current || !editingSnapshotId || !editDraft) {
+      return
+    }
+
+    const legMarks = current.legs
+      .map((leg) => {
+        const rawValue = editDraft.marks[leg.id]
+        return rawValue
+          ? {
+              legId: leg.id,
+              markPrice: Number(rawValue),
+            }
+          : null
+      })
+      .filter((item): item is { legId: string; markPrice: number } => Boolean(item))
+
+    await editSnapshot(editingSnapshotId, {
+      positionId,
+      snapshotAt: editDraft.snapshotAt,
+      underlyingPrice: editDraft.underlyingPrice ? Number(editDraft.underlyingPrice) : undefined,
+      legMarks,
+      note: editDraft.note,
+    })
+
+    setEditingSnapshotId(undefined)
+    setEditDraft(undefined)
+    setPositionMessage(positionId, '正式估值已更新。')
+  }
+
+  async function handleDeleteSnapshot(snapshot: PriceSnapshot) {
+    if (!window.confirm('确认删除这条正式估值吗？')) {
+      return
+    }
+
+    await removeSnapshot(snapshot.id)
+    setPositionMessage(snapshot.positionId, '正式估值已删除。')
   }
 
   return (
@@ -116,15 +182,15 @@ export function ValuationPage() {
       <section className="page-intro">
         <div>
           <h2>估值更新</h2>
-          <p>自动读取期货腿和标的价格，期权继续手动补录。所有正式估值都写回 Python 后端。</p>
+          <p>自动抓期货腿和标的价格，期权或缺失行情的腿继续手动补录；最新正式快照也可以在这里直接改删。</p>
         </div>
       </section>
 
       <section className="card">
         <div className="section-head">
           <div>
-            <h3>自动读取行情</h3>
-            <p>自动刷新只更新当前实时估值。正式快照在你手动保存，或工作日 15:05 自动生成。</p>
+            <h3>自动行情</h3>
+            <p>自动刷新只更新实时估值。正式快照由你手动保存，或由工作日收盘自动补一条去重快照。</p>
           </div>
           <div className="hero-actions">
             <button className="btn btn--secondary" type="button" onClick={() => void refreshQuotes()}>
@@ -151,7 +217,7 @@ export function ValuationPage() {
           </div>
           <div className="kv">
             <span>说明</span>
-            <strong>{health.message || '工作日 15:05 自动保存一条正式收盘快照'}</strong>
+            <strong>{health.message || '收盘快照支持自动去重保存'}</strong>
           </div>
         </div>
       </section>
@@ -159,7 +225,7 @@ export function ValuationPage() {
       {isLoading ? (
         <section className="empty-state">
           <strong>正在读取后端数据</strong>
-          <p>请稍候，系统正在加载未平仓记录。</p>
+          <p>请稍候，系统正在加载待估值仓位。</p>
         </section>
       ) : ordered.length ? (
         <section className="card-list">
@@ -173,7 +239,7 @@ export function ValuationPage() {
                 <div>
                   <h3>{position.strategyName}</h3>
                   <p>
-                    {position.product} · {position.underlyingSymbol} · {events.length} 个仓位事件
+                    {position.product} / {position.underlyingSymbol} / {events.length} 个仓位事件
                   </p>
                 </div>
                 <div className="tag-row">
@@ -182,9 +248,11 @@ export function ValuationPage() {
                       ? '自动估值完整'
                       : realtime.coverageStatus === 'partial'
                         ? '部分自动估值'
-                        : '需依赖正式估值'}
+                        : '需要正式估值'}
                   </span>
-                  <span className="pill">最近正式估值 {formatDate(latestSnapshot?.snapshotAt)}</span>
+                  <Link className="btn btn--ghost" to={`/positions/${position.id}`}>
+                    打开详情页
+                  </Link>
                 </div>
               </div>
 
@@ -207,12 +275,147 @@ export function ValuationPage() {
                 </article>
               </div>
 
+              {latestSnapshot ? (
+                <article className="card card--soft">
+                  <div className="section-head">
+                    <div>
+                      <h3>最新正式估值</h3>
+                      <p>
+                        {formatDateTime(latestSnapshot.snapshotAt)} / {latestSnapshot.audit.sourceLabel}
+                      </p>
+                    </div>
+                    {latestSnapshot.audit.sourceType !== 'auto_close' ? (
+                      <div className="tag-row">
+                        <button
+                          className="btn btn--ghost"
+                          type="button"
+                          onClick={() => startEditSnapshot(latestSnapshot)}
+                        >
+                          编辑
+                        </button>
+                        <button
+                          className="btn btn--ghost"
+                          type="button"
+                          onClick={() => void handleDeleteSnapshot(latestSnapshot)}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="pill">自动收盘快照</span>
+                    )}
+                  </div>
+
+                  {editingSnapshotId === latestSnapshot.id && editDraft ? (
+                    <div className="list-stack">
+                      <div className="form-grid form-grid--three">
+                        <div className="field">
+                          <label>估值日期</label>
+                          <input
+                            type="date"
+                            value={editDraft.snapshotAt}
+                            onChange={(event) =>
+                              setEditDraft((current) =>
+                                current ? { ...current, snapshotAt: event.target.value } : current,
+                              )
+                            }
+                          />
+                        </div>
+
+                        <div className="field">
+                          <label>标的价格</label>
+                          <input
+                            step="0.0001"
+                            type="number"
+                            value={editDraft.underlyingPrice}
+                            onChange={(event) =>
+                              setEditDraft((current) =>
+                                current ? { ...current, underlyingPrice: event.target.value } : current,
+                              )
+                            }
+                          />
+                        </div>
+
+                        <div className="field field--wide">
+                          <label>说明</label>
+                          <input
+                            value={editDraft.note}
+                            onChange={(event) =>
+                              setEditDraft((current) =>
+                                current ? { ...current, note: event.target.value } : current,
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="list-stack">
+                        {legs.map((leg) => (
+                          <div className="field" key={leg.id}>
+                            <label>{leg.contractCode} 价格</label>
+                            <input
+                              step="0.0001"
+                              type="number"
+                              value={editDraft.marks[leg.id] ?? ''}
+                              onChange={(event) =>
+                                setEditDraft((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        marks: {
+                                          ...current.marks,
+                                          [leg.id]: event.target.value,
+                                        },
+                                      }
+                                    : current,
+                                )
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="form-actions">
+                        <button className="btn" type="button" onClick={() => void handleUpdateSnapshot(position.id)}>
+                          保存修改
+                        </button>
+                        <button
+                          className="btn btn--secondary"
+                          type="button"
+                          onClick={() => {
+                            setEditingSnapshotId(undefined)
+                            setEditDraft(undefined)
+                          }}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="summary-list">
+                      <div className="kv-block">
+                        <span>说明</span>
+                        <strong>{latestSnapshot.note || '无备注'}</strong>
+                      </div>
+                      <div className="kv-block">
+                        <span>标的价格</span>
+                        <strong>
+                          {latestSnapshot.underlyingPrice != null
+                            ? formatMoney(latestSnapshot.underlyingPrice)
+                            : '未记录'}
+                        </strong>
+                      </div>
+                    </div>
+                  )}
+                </article>
+              ) : null}
+
               <div className="detail-grid">
                 <article className="card card--soft">
                   <div className="section-head">
                     <div>
                       <h3>自动行情</h3>
-                      <p>期货腿和标的合约会优先展示自动读取结果，期权腿会标记为需手动估值。</p>
+                      <p>期货腿优先展示自动价格，期权腿仍标记为需要手动估值。</p>
                     </div>
                   </div>
 
@@ -222,8 +425,8 @@ export function ValuationPage() {
                       <strong>
                         {position.underlyingSymbol}
                         {realtime.liveQuote?.underlyingPrice != null
-                          ? ` · ${formatMoney(realtime.liveQuote.underlyingPrice)}`
-                          : ' · 暂无自动价格'}
+                          ? ` / ${formatMoney(realtime.liveQuote.underlyingPrice)}`
+                          : ' / 暂无自动价格'}
                       </strong>
                     </div>
 
@@ -236,7 +439,7 @@ export function ValuationPage() {
                           <span>{leg.contractCode}</span>
                           <strong>
                             {liveLeg?.markPrice != null
-                              ? `${formatMoney(liveLeg.markPrice)} · ${formatQuoteCoverage(coverage)}`
+                              ? `${formatMoney(liveLeg.markPrice)} / ${formatQuoteCoverage(coverage)}`
                               : formatQuoteCoverage(coverage)}
                           </strong>
                         </div>
@@ -248,8 +451,8 @@ export function ValuationPage() {
                 <article className="card card--soft">
                   <div className="section-head">
                     <div>
-                      <h3>正式估值保存</h3>
-                      <p>期货自动价格会直接参与保存，期权和缺失行情的持仓请在下方手动补录。</p>
+                      <h3>新建正式估值</h3>
+                      <p>自动价格会直接带入，缺失腿在下方手动补齐。</p>
                     </div>
                   </div>
 
@@ -260,14 +463,14 @@ export function ValuationPage() {
                     </div>
 
                     <div className="field">
-                      <label htmlFor={`underlyingPrice-${position.id}`}>手动补录标的价格</label>
+                      <label htmlFor={`underlyingPrice-${position.id}`}>手动标的价格</label>
                       <input
                         id={`underlyingPrice-${position.id}`}
                         name="underlyingPrice"
                         placeholder={
                           realtime.liveQuote?.underlyingPrice != null
-                            ? `已自动读取 ${realtime.liveQuote.underlyingPrice}`
-                            : '自动价格缺失时可填写'
+                            ? `自动价格 ${realtime.liveQuote.underlyingPrice}`
+                            : '缺失时可手动填写'
                         }
                         step="0.0001"
                         type="number"
@@ -280,7 +483,7 @@ export function ValuationPage() {
                         defaultValue="手动保存正式估值"
                         id={`note-${position.id}`}
                         name="note"
-                        placeholder="例如：收盘后确认，期权价格手动补录"
+                        placeholder="例如: 收盘后确认，期权价格手动补录"
                       />
                     </div>
                   </div>
@@ -297,7 +500,7 @@ export function ValuationPage() {
                             <div>
                               <strong>{leg.contractCode}</strong>
                               <p>
-                                开仓价 {formatMoney(leg.entryPrice)} · 数量 {leg.qty}
+                                开仓价 {formatMoney(leg.entryPrice)} / 数量 {leg.qty}
                               </p>
                             </div>
                             <span className="pill">{formatQuoteCoverage(coverage)}</span>
@@ -319,7 +522,7 @@ export function ValuationPage() {
                                 }
                                 id={`mark-${leg.id}`}
                                 name={`mark-${leg.id}`}
-                                placeholder={leg.instrumentType === 'option' ? '期权需手动估值' : '自动价格缺失时可填写'}
+                                placeholder={leg.instrumentType === 'option' ? '期权请手动估值' : '自动价格缺失时补录'}
                                 step="0.0001"
                                 type="number"
                               />
@@ -349,7 +552,7 @@ export function ValuationPage() {
       ) : (
         <section className="empty-state">
           <strong>目前没有未平仓记录</strong>
-          <p>当你开仓或导入持仓后，这里会出现待估值的交易列表。</p>
+          <p>当你开仓或导入持仓后，这里会出现待估值交易列表。</p>
         </section>
       )}
     </>

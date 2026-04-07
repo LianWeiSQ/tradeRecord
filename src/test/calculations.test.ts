@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { calculatePositionMetrics } from '../services/calculations'
-import type { PositionEvent, PriceSnapshot, StrategyLeg } from '../types/trade'
+import type { StrategyLeg } from '../types/trade'
+import { makeEvent, makeSnapshot } from './fixtures'
 
 describe('calculatePositionMetrics', () => {
   it('calculates realized and unrealized pnl for long and short legs', () => {
@@ -32,34 +33,27 @@ describe('calculatePositionMetrics', () => {
       },
     ]
 
-    const events: PositionEvent[] = [
-      {
+    const events = [
+      makeEvent({
         id: 'open',
         positionId: 'position-1',
-        eventType: 'open',
-        occurredAt: '2026-04-01',
         note: 'initial',
-        legChanges: [],
-        newLegIds: [],
-        isInitial: true,
-        createdAt: '2026-04-01T00:00:00.000Z',
-      },
-      {
+      }),
+      makeEvent({
         id: 'reduce',
         positionId: 'position-1',
         eventType: 'reduce',
         occurredAt: '2026-04-03',
         note: 'trim',
+        isInitial: false,
         legChanges: [
           { legId: 'future-1', quantityChange: -1, price: 2850 },
           { legId: 'put-1', quantityChange: -1, price: 38 },
         ],
-        newLegIds: [],
-        createdAt: '2026-04-03T00:00:00.000Z',
-      },
+      }),
     ]
 
-    const snapshot: PriceSnapshot = {
+    const snapshot = makeSnapshot({
       id: 'snap-1',
       positionId: 'position-1',
       snapshotAt: '2026-04-05',
@@ -68,9 +62,7 @@ describe('calculatePositionMetrics', () => {
         { legId: 'future-1', markPrice: 2865 },
         { legId: 'put-1', markPrice: 35 },
       ],
-      note: '',
-      createdAt: '2026-04-05T00:00:00.000Z',
-    }
+    })
 
     const metrics = calculatePositionMetrics(legs, events, snapshot)
 

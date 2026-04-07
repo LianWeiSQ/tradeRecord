@@ -1,0 +1,24 @@
+{
+  "cached_quotes": [
+    {
+      "positionId": "3c2b0abe-f4c6-482e-ac08-4116b859bd69",
+      "asOf": "2026-04-07T18:43:32",
+      "underlyingPrice": null,
+      "legQuotes": [
+        {
+          "legId": "5bed6bde-efd1-4946-9e9a-8c1ff162a7f3",
+          "contractCode": "FU2605",
+          "instrumentType": "future",
+          "coverage": "missing",
+          "sourceLabel": "AkShare",
+          "message": "行情源未返回该合约价格"
+        }
+      ],
+      "coverageStatus": "none",
+      "sourceLabel": "AkShare",
+      "message": "行情源未返回该合约价格"
+    }
+  ],
+  "last_refresh_at": "2026-04-07T18:43:32",
+  "last_close_snapshot_date": "2026-04-07"
+}

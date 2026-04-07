@@ -7,6 +7,23 @@ export type PositionEventType = 'open' | 'add' | 'reduce' | 'close' | 'roll'
 export type PositionEventActionType = Exclude<PositionEventType, 'open'>
 export type QuoteCoverageView = 'auto' | 'manual_required' | 'missing'
 export type LiveQuoteCoverageStatus = 'full' | 'partial' | 'none'
+export type ReviewStatus = 'pending' | 'ready' | 'reviewed'
+export type RecordSourceType = 'manual' | 'import' | 'auto_close' | 'restore'
+export type RecordMutationType = 'created' | 'updated' | 'imported' | 'auto_close' | 'restored'
+
+export interface AuditStamp {
+  sourceType: RecordSourceType
+  sourceLabel: string
+  lastModifiedAt: string
+  lastModifiedType: RecordMutationType
+}
+
+export interface WorkflowState {
+  needsReview: boolean
+  needsManualValuation: boolean
+  hasDataIssue: boolean
+  daysSinceLastUpdate: number
+}
 
 export interface Account {
   id: AccountType
@@ -40,11 +57,20 @@ export interface StrategyPosition {
   thesis: string
   plan: string
   expectedScenario: string
+  riskNotes: string
+  exitRule: string
   reviewResult: string
   reviewConclusion: string
+  executionAssessment: string
+  deviationReason: string
+  resultAttribution: string
+  nextAction: string
+  reviewStatus: ReviewStatus
   tags: string[]
   remarks: string
   importNotes: string[]
+  audit: AuditStamp
+  workflowState: WorkflowState
   createdAt: string
   updatedAt: string
   latestSnapshotAt?: string
@@ -82,6 +108,7 @@ export interface PositionEvent {
   legChanges: LegChange[]
   newLegIds: string[]
   isInitial?: boolean
+  audit: AuditStamp
   createdAt: string
 }
 
@@ -97,6 +124,7 @@ export interface PriceSnapshot {
   underlyingPrice?: number
   legMarks: PriceMark[]
   note: string
+  audit: AuditStamp
   createdAt: string
 }
 
@@ -135,8 +163,15 @@ export interface StrategyPositionInput {
   thesis: string
   plan: string
   expectedScenario: string
+  riskNotes: string
+  exitRule: string
   reviewResult: string
   reviewConclusion: string
+  executionAssessment: string
+  deviationReason: string
+  resultAttribution: string
+  nextAction: string
+  reviewStatus: ReviewStatus
   tags: string[]
   remarks: string
   importNotes?: string[]
@@ -152,6 +187,8 @@ export interface PositionEventInput {
   newLegs?: StrategyLegInput[]
 }
 
+export interface PositionEventUpdateInput extends PositionEventInput {}
+
 export interface PriceSnapshotInput {
   positionId: string
   snapshotAt: string
@@ -159,6 +196,8 @@ export interface PriceSnapshotInput {
   legMarks: PriceMark[]
   note: string
 }
+
+export interface PriceSnapshotUpdateInput extends PriceSnapshotInput {}
 
 export interface LiveLegQuote {
   legId: string
@@ -275,6 +314,7 @@ export interface DashboardFilterState {
   product: string | 'all'
   status: PositionStatus | 'all'
   range: 'all' | '30d' | '90d'
+  search: string
 }
 
 export interface DashboardOverviewView {
@@ -292,6 +332,34 @@ export interface RecentActivityView {
   subtitle: string
   occurredAt: string
   amountLabel?: string
+}
+
+export interface ReviewFilterState {
+  accountType: AccountType | 'all'
+  product: string | 'all'
+  reviewStatus: ReviewStatus | 'all'
+  range: 'all' | '30d' | '90d'
+  search: string
+}
+
+export interface ReviewStatsView {
+  totalClosed: number
+  reviewedCount: number
+  pendingCount: number
+  winRate: number
+  averageHoldingDays: number
+  bestPnl: number
+  worstPnl: number
+}
+
+export interface WorkItemView {
+  id: string
+  positionId: string
+  kind: 'review' | 'valuation' | 'expiry' | 'stale' | 'data_issue'
+  title: string
+  detail: string
+  priority: 'high' | 'medium' | 'low'
+  dueLabel?: string
 }
 
 export interface NavigationItem {

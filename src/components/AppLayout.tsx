@@ -7,6 +7,7 @@ import type { NavigationItem } from '../types/trade'
 const navigationItems: NavigationItem[] = [
   { to: '/', label: '首页', shortLabel: '首页', icon: 'DB' },
   { to: '/positions/new', label: '开仓', shortLabel: '开仓', icon: 'OP' },
+  { to: '/reviews', label: '复盘', shortLabel: '复盘', icon: 'RV' },
   { to: '/valuations', label: '估值', shortLabel: '估值', icon: 'MT' },
   { to: '/import', label: '导入', shortLabel: '导入', icon: 'IM' },
 ]
@@ -30,6 +31,13 @@ function pageMeta(pathname: string) {
     return {
       title: '估值',
       description: '自动读取期货与标的行情，期权继续手动补录，并保存正式估值快照。',
+    }
+  }
+
+  if (pathname.startsWith('/reviews')) {
+    return {
+      title: '复盘工作台',
+      description: '集中处理待复盘队列，补齐交易计划、执行偏差、结果归因和下次规则。',
     }
   }
 
@@ -164,8 +172,8 @@ export function AppLayout() {
               <Link className="btn btn--secondary" to={primaryAction}>
                 {location.pathname === '/' ? '去开仓' : '返回首页'}
               </Link>
-              <Link className="btn" to="/valuations">
-                去估值
+              <Link className="btn" to={location.pathname === '/reviews' ? '/valuations' : '/reviews'}>
+                {location.pathname === '/reviews' ? '去估值' : '去复盘'}
               </Link>
             </div>
           </div>

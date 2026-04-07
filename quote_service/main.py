@@ -7,12 +7,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from .errors import AppError
 from .schemas import (
     BackupPayload,
     ExcelImportPayload,
+    PositionEventUpdateInput,
+    PriceSnapshotUpdateInput,
     QuotePositionPayload,
     QuoteRefreshRequest,
     QuoteServiceHealth,
@@ -24,6 +28,8 @@ from .schemas import (
 from .storage import (
     clear_all_data,
     create_strategy_position,
+    delete_position_event,
+    delete_price_snapshot,
     export_backup_payload,
     get_trade_bundle,
     init_db,
@@ -33,6 +39,8 @@ from .storage import (
     save_close_snapshot_with_signature,
     save_import_batch,
     save_price_snapshot,
+    update_position_event,
+    update_price_snapshot,
     update_position_review,
     add_position_event,
 )
@@ -52,7 +60,7 @@ SNAPSHOT_MINUTE = 5
 FINANCIAL_PREFIXES = {"IF", "IH", "IC", "IM", "TF", "T", "TS", "TL"}
 state_lock = threading.Lock()
 
-app = FastAPI(title="Trade Record Backend", version="2.0.0")
+app = FastAPI(title="Trade Record Backend", version="3.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -60,6 +68,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(AppError)
+async def handle_app_error(_: Request, error: AppError) -> JSONResponse:
+    return JSONResponse(
+        status_code=error.status_code,
+        content={"error": {"code": error.code, "message": error.message}},
+    )
 
 
 def load_quote_state() -> dict[str, Any]:
@@ -360,9 +376,33 @@ def create_event(input_data: PositionEventInput) -> dict[str, bool]:
     return {"ok": True}
 
 
+@app.put("/api/trades/events/{event_id}")
+def update_event(event_id: str, input_data: PositionEventUpdateInput) -> dict[str, bool]:
+    update_position_event(event_id, input_data)
+    return {"ok": True}
+
+
+@app.delete("/api/trades/events/{event_id}")
+def remove_event(event_id: str) -> dict[str, bool]:
+    delete_position_event(event_id)
+    return {"ok": True}
+
+
 @app.post("/api/trades/snapshots")
 def create_snapshot(input_data: PriceSnapshotInput) -> dict[str, bool]:
     save_price_snapshot(input_data)
+    return {"ok": True}
+
+
+@app.put("/api/trades/snapshots/{snapshot_id}")
+def update_snapshot(snapshot_id: str, input_data: PriceSnapshotUpdateInput) -> dict[str, bool]:
+    update_price_snapshot(snapshot_id, input_data)
+    return {"ok": True}
+
+
+@app.delete("/api/trades/snapshots/{snapshot_id}")
+def remove_snapshot(snapshot_id: str) -> dict[str, bool]:
+    delete_price_snapshot(snapshot_id)
     return {"ok": True}
 
 

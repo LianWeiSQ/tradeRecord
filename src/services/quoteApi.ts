@@ -16,7 +16,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const detail = await response.text()
-    throw new Error(detail || `请求失败: ${response.status}`)
+    try {
+      const parsed = JSON.parse(detail) as { error?: { message?: string } }
+      throw new Error(parsed.error?.message || `请求失败: ${response.status}`)
+    } catch {
+      throw new Error(detail || `请求失败: ${response.status}`)
+    }
   }
 
   return (await response.json()) as T

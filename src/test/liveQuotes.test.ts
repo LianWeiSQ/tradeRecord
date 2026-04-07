@@ -1,27 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { buildRealtimePositionView, buildSnapshotInputFromLiveAndManual } from '../services/liveQuotes'
-import type { LiveQuoteState, PositionEvent, PriceSnapshot, StrategyLeg, StrategyPosition } from '../types/trade'
+import type { LiveQuoteState, StrategyLeg } from '../types/trade'
+import { makeEvent, makePosition, makeSnapshot } from './fixtures'
 
 describe('live quote helpers', () => {
-  const position: StrategyPosition = {
+  const position = makePosition({
     id: 'position-1',
-    accountType: 'live',
     product: '股指',
     underlyingSymbol: 'IH2509',
     strategyName: '股指保护',
-    openedAt: '2026-04-01',
-    status: 'open',
-    thesis: '',
-    plan: '',
-    expectedScenario: '',
-    reviewResult: '',
-    reviewConclusion: '',
-    tags: [],
-    remarks: '',
-    importNotes: [],
-    createdAt: '2026-04-01T00:00:00.000Z',
-    updatedAt: '2026-04-01T00:00:00.000Z',
-  }
+  })
 
   const legs: StrategyLeg[] = [
     {
@@ -52,21 +40,16 @@ describe('live quote helpers', () => {
     },
   ]
 
-  const events: PositionEvent[] = [
-    {
+  const events = [
+    makeEvent({
       id: 'open-1',
       positionId: 'position-1',
-      eventType: 'open',
-      occurredAt: '2026-04-01',
       note: '初始开仓',
-      legChanges: [],
       newLegIds: ['future-1', 'option-1'],
-      isInitial: true,
-      createdAt: '2026-04-01T00:00:00.000Z',
-    },
+    }),
   ]
 
-  const latestSnapshot: PriceSnapshot = {
+  const latestSnapshot = makeSnapshot({
     id: 'snapshot-1',
     positionId: 'position-1',
     snapshotAt: '2026-04-05T15:00:00.000Z',
@@ -76,8 +59,7 @@ describe('live quote helpers', () => {
       { legId: 'option-1', markPrice: 48 },
     ],
     note: '收盘估值',
-    createdAt: '2026-04-05T15:00:00.000Z',
-  }
+  })
 
   const liveQuote: LiveQuoteState = {
     positionId: 'position-1',
@@ -98,7 +80,7 @@ describe('live quote helpers', () => {
         instrumentType: 'option',
         coverage: 'manual_required',
         sourceLabel: 'AkShare',
-        message: '期权需手动估值',
+        message: '期权需要手动估值',
       },
     ],
     coverageStatus: 'partial',

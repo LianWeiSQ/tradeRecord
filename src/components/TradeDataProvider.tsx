@@ -11,19 +11,25 @@ import {
   createTradeEvent,
   createTradePosition,
   createTradeSnapshot,
+  deleteTradeEvent,
+  deleteTradeSnapshot,
   exportTradeBackup,
   fetchTradeBundle,
   importTradeBatch,
   restoreTradeBackup,
+  updateTradeEvent,
   updateTradeReview,
+  updateTradeSnapshot,
 } from '../services/tradeApi'
 import type {
   BackupPayload,
   PositionEventInput,
+  PositionEventUpdateInput,
   StrategyPosition,
   StrategyPositionInput,
   TradeDataBundle,
   PriceSnapshotInput,
+  PriceSnapshotUpdateInput,
 } from '../types/trade'
 
 interface TradeDataContextValue {
@@ -33,12 +39,29 @@ interface TradeDataContextValue {
   refreshData: () => Promise<void>
   createPosition: (input: StrategyPositionInput) => Promise<string>
   addEvent: (input: PositionEventInput) => Promise<void>
+  editEvent: (eventId: string, input: PositionEventUpdateInput) => Promise<void>
+  removeEvent: (eventId: string) => Promise<void>
   saveSnapshot: (input: PriceSnapshotInput) => Promise<void>
+  editSnapshot: (snapshotId: string, input: PriceSnapshotUpdateInput) => Promise<void>
+  removeSnapshot: (snapshotId: string) => Promise<void>
   updateReview: (
     positionId: string,
     fields: Pick<
       StrategyPosition,
-      'thesis' | 'plan' | 'expectedScenario' | 'reviewResult' | 'reviewConclusion' | 'remarks' | 'tags'
+      | 'thesis'
+      | 'plan'
+      | 'expectedScenario'
+      | 'riskNotes'
+      | 'exitRule'
+      | 'reviewResult'
+      | 'reviewConclusion'
+      | 'executionAssessment'
+      | 'deviationReason'
+      | 'resultAttribution'
+      | 'nextAction'
+      | 'reviewStatus'
+      | 'remarks'
+      | 'tags'
     >,
   ) => Promise<void>
   saveImportBatch: (inputs: StrategyPositionInput[], stats: TradeDataBundle['stats']) => Promise<void>
@@ -89,8 +112,28 @@ export function TradeDataProvider({ children }: PropsWithChildren) {
     await refreshData()
   }
 
+  async function editEvent(eventId: string, input: PositionEventUpdateInput) {
+    await updateTradeEvent(eventId, input)
+    await refreshData()
+  }
+
+  async function removeEvent(eventId: string) {
+    await deleteTradeEvent(eventId)
+    await refreshData()
+  }
+
   async function saveSnapshot(input: PriceSnapshotInput) {
     await createTradeSnapshot(input)
+    await refreshData()
+  }
+
+  async function editSnapshot(snapshotId: string, input: PriceSnapshotUpdateInput) {
+    await updateTradeSnapshot(snapshotId, input)
+    await refreshData()
+  }
+
+  async function removeSnapshot(snapshotId: string) {
+    await deleteTradeSnapshot(snapshotId)
     await refreshData()
   }
 
@@ -98,7 +141,20 @@ export function TradeDataProvider({ children }: PropsWithChildren) {
     positionId: string,
     fields: Pick<
       StrategyPosition,
-      'thesis' | 'plan' | 'expectedScenario' | 'reviewResult' | 'reviewConclusion' | 'remarks' | 'tags'
+      | 'thesis'
+      | 'plan'
+      | 'expectedScenario'
+      | 'riskNotes'
+      | 'exitRule'
+      | 'reviewResult'
+      | 'reviewConclusion'
+      | 'executionAssessment'
+      | 'deviationReason'
+      | 'resultAttribution'
+      | 'nextAction'
+      | 'reviewStatus'
+      | 'remarks'
+      | 'tags'
     >,
   ) {
     await updateTradeReview(positionId, fields)
@@ -128,7 +184,11 @@ export function TradeDataProvider({ children }: PropsWithChildren) {
       refreshData,
       createPosition,
       addEvent,
+      editEvent,
+      removeEvent,
       saveSnapshot,
+      editSnapshot,
+      removeSnapshot,
       updateReview: saveReview,
       saveImportBatch: saveImport,
       exportBackup: exportTradeBackup,

@@ -14,6 +14,7 @@ import {
   formatEventType,
   formatMoney,
 } from '../services/format'
+import { buildWorkItems, matchesPositionSearch } from '../services/workbench'
 import type {
   DashboardFilterState,
   DashboardGroupView,
@@ -25,6 +26,7 @@ const defaultFilters: DashboardFilterState = {
   product: 'all',
   status: 'all',
   range: 'all',
+  search: '',
 }
 
 function withinRange(openedAt: string, range: DashboardFilterState['range']) {
@@ -47,18 +49,18 @@ function buildRecentActivities(groups: DashboardGroupView[]): RecentActivityView
     activities.push({
       id: `open-${view.position.id}`,
       type: 'open',
-      title: `开仓 · ${view.position.strategyName}`,
-      subtitle: `${formatAccountName(view.position.accountType)} · ${view.position.product} · ${view.position.underlyingSymbol}`,
+      title: `开仓 / ${view.position.strategyName}`,
+      subtitle: `${formatAccountName(view.position.accountType)} / ${view.position.product} / ${view.position.underlyingSymbol}`,
       occurredAt: view.position.openedAt,
-      amountLabel: `${view.legs.length} 条持仓明细`,
+      amountLabel: `${view.legs.length} 条腿`,
     })
 
     for (const event of view.events.filter((item) => !item.isInitial)) {
       activities.push({
         id: event.id,
         type: 'event',
-        title: `${formatEventType(event.eventType)} · ${view.position.strategyName}`,
-        subtitle: event.note || `${view.position.product} · ${view.position.underlyingSymbol}`,
+        title: `${formatEventType(event.eventType)} / ${view.position.strategyName}`,
+        subtitle: event.note || `${view.position.product} / ${view.position.underlyingSymbol}`,
         occurredAt: event.occurredAt,
         amountLabel: `${event.legChanges.length} 条变动`,
       })
@@ -68,8 +70,8 @@ function buildRecentActivities(groups: DashboardGroupView[]): RecentActivityView
       activities.push({
         id: view.latestSnapshot.id,
         type: 'valuation',
-        title: `正式估值 · ${view.position.strategyName}`,
-        subtitle: `${view.position.product} · ${view.position.underlyingSymbol}`,
+        title: `估值 / ${view.position.strategyName}`,
+        subtitle: `${view.position.product} / ${view.position.underlyingSymbol}`,
         occurredAt: view.latestSnapshot.snapshotAt,
         amountLabel: formatMoney(view.metrics.unrealizedPnl),
       })
@@ -102,7 +104,6 @@ export function DashboardPage() {
     () => buildDashboardGroups(bundle.positions, bundle.legs, bundle.events, bundle.priceSnapshots),
     [bundle],
   )
-  const stats = bundle.stats
 
   const productOptions = useMemo(
     () =>
@@ -122,11 +123,12 @@ export function DashboardPage() {
           positions: group.positions.filter(
             (view) =>
               (filters.status === 'all' || view.position.status === filters.status) &&
-              withinRange(view.position.openedAt, filters.range),
+              withinRange(view.position.openedAt, filters.range) &&
+              matchesPositionSearch(view.position, view.legs, filters.search),
           ),
         }))
         .filter((group) => group.positions.length),
-    [filters.accountType, filters.product, filters.range, filters.status, groups],
+    [filters.accountType, filters.product, filters.range, filters.search, filters.status, groups],
   )
 
   const realtimeGroups = useMemo(
@@ -151,6 +153,14 @@ export function DashboardPage() {
     [filteredGroups, liveQuotes],
   )
 
+  const filteredViews = useMemo(
+    () => filteredGroups.flatMap((group) => group.positions),
+    [filteredGroups],
+  )
+
+  const workItems = useMemo(() => buildWorkItems(filteredViews).slice(0, 8), [filteredViews])
+  const recentActivities = useMemo(() => buildRecentActivities(filteredGroups), [filteredGroups])
+
   const overview = useMemo(() => {
     const positions = realtimeGroups.flatMap((group) => group.positions)
 
@@ -166,8 +176,6 @@ export function DashboardPage() {
       autoCoveredCount: positions.filter((item) => item.realtime.coverageStatus !== 'none').length,
     }
   }, [realtimeGroups])
-
-  const recentActivities = useMemo(() => buildRecentActivities(filteredGroups), [filteredGroups])
 
   const allPositions = useMemo(
     () =>
@@ -188,7 +196,7 @@ export function DashboardPage() {
       <section className="page-intro">
         <div>
           <h2>交易总览</h2>
-          <p>首页优先展示当前实时收益，所有数据来自 Python 后端，前端只负责展示和交互。</p>
+          <p>先看工作清单和当前仓位，再进入详情页补事件、估值和复盘。</p>
         </div>
         <div className="hero-actions">
           <button className="btn btn--secondary" type="button" onClick={() => void refreshQuotes()}>
@@ -203,8 +211,8 @@ export function DashboardPage() {
       <section className="card">
         <div className="section-head">
           <div>
-            <h3>看板筛选</h3>
-            <p>筛选会同步影响统计卡、最近记录、当前持仓摘要和分组列表。</p>
+            <h3>筛选与搜索</h3>
+            <p>支持按账户、品种、状态、时间和关键字过滤。关键字会匹配合约、策略名、标签和备注。</p>
           </div>
         </div>
 
@@ -267,7 +275,7 @@ export function DashboardPage() {
           </div>
 
           <div className="field">
-            <label htmlFor="dashboard-range">时间范围</label>
+            <label htmlFor="dashboard-range">时间</label>
             <select
               id="dashboard-range"
               value={filters.range}
@@ -282,6 +290,21 @@ export function DashboardPage() {
               <option value="30d">近 30 天</option>
               <option value="90d">近 90 天</option>
             </select>
+          </div>
+
+          <div className="field field--wide">
+            <label htmlFor="dashboard-search">搜索</label>
+            <input
+              id="dashboard-search"
+              placeholder="搜索合约、策略名、标签或备注"
+              value={filters.search}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  search: event.target.value,
+                }))
+              }
+            />
           </div>
         </div>
       </section>
@@ -322,8 +345,39 @@ export function DashboardPage() {
           <section className="card">
             <div className="section-head">
               <div>
+                <h3>工作清单</h3>
+                <p>优先处理待复盘、待补估值、临近到期和数据异常。</p>
+              </div>
+              <Link className="btn btn--secondary" to="/reviews">
+                打开复盘台
+              </Link>
+            </div>
+
+            {workItems.length ? (
+              <div className="summary-list">
+                {workItems.map((item) => (
+                  <Link className="summary-row" key={item.id} to={`/positions/${item.positionId}`}>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <p>{item.detail}</p>
+                    </div>
+                    <div className="summary-row__meta">
+                      <span>{item.priority.toUpperCase()}</span>
+                      {item.dueLabel ? <strong>{item.dueLabel}</strong> : null}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-inline">当前筛选下没有待处理工作项。</div>
+            )}
+          </section>
+
+          <section className="card">
+            <div className="section-head">
+              <div>
                 <h3>行情状态</h3>
-                <p>自动行情由 Python 后端统一拉取，前端只读取缓存结果并展示。</p>
+                <p>自动行情只负责辅助估值，正式快照和历史回算仍以后端记录为准。</p>
               </div>
             </div>
 
@@ -341,19 +395,19 @@ export function DashboardPage() {
                 <strong>{formatDateTime(health.checkedAt)}</strong>
               </div>
               <div className="kv">
-                <span>提示</span>
-                <strong>{health.message || '实时收益已启用'}</strong>
+                <span>说明</span>
+                <strong>{health.message || '行情服务已连接'}</strong>
               </div>
             </div>
           </section>
 
-          {stats.length ? <SummarySparkline stats={stats} /> : null}
+          {bundle.stats.length ? <SummarySparkline stats={bundle.stats} /> : null}
 
           <section className="card">
             <div className="section-head">
               <div>
                 <h3>最近记录</h3>
-                <p>混合展示最近的开仓、仓位事件和正式估值，方便快速回看最近动作。</p>
+                <p>混合展示开仓、事件和正式估值。</p>
               </div>
             </div>
 
@@ -374,7 +428,7 @@ export function DashboardPage() {
                 ))}
               </div>
             ) : (
-              <div className="empty-inline">当前筛选下还没有最近记录。</div>
+              <div className="empty-inline">当前筛选下没有最近记录。</div>
             )}
           </section>
         </div>
@@ -383,8 +437,8 @@ export function DashboardPage() {
           <section className="card">
             <div className="section-head">
               <div>
-                <h3>当前持仓摘要</h3>
-                <p>优先显示最近更新的交易记录，并提示当前使用的是自动估值还是正式估值。</p>
+                <h3>当前仓位摘要</h3>
+                <p>优先展示最近更新的记录和当前估值覆盖情况。</p>
               </div>
             </div>
 
@@ -395,7 +449,7 @@ export function DashboardPage() {
                     <div>
                       <strong>{view.position.strategyName}</strong>
                       <p>
-                        {formatAccountName(view.position.accountType)} · {view.position.product} ·{' '}
+                        {formatAccountName(view.position.accountType)} / {view.position.product} /{' '}
                         {coverageLabel(realtime.coverageStatus)}
                       </p>
                     </div>
@@ -424,7 +478,7 @@ export function DashboardPage() {
       {isLoading ? (
         <section className="empty-state">
           <strong>正在读取后端数据</strong>
-          <p>请稍候，系统正在从 Python 后端加载交易记录。</p>
+          <p>请稍候，系统正在加载交易记录。</p>
         </section>
       ) : realtimeGroups.length ? (
         <section className="group-list">
@@ -433,10 +487,10 @@ export function DashboardPage() {
               <div className="section-head">
                 <div>
                   <h3>
-                    {formatAccountName(group.accountType)} · {group.product}
+                    {formatAccountName(group.accountType)} / {group.product}
                   </h3>
                   <p>
-                    未平仓 {group.positions.filter((item) => item.view.position.status === 'open').length} 笔 · 最近估值{' '}
+                    未平仓 {group.positions.filter((item) => item.view.position.status === 'open').length} 笔 / 最近估值{' '}
                     {formatDate(group.latestSnapshotAt)}
                   </p>
                 </div>

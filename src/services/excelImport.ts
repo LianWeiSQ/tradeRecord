@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx'
+import readXlsxFile from 'read-excel-file/browser'
 import { isoNow, toNumber } from './format'
 import type {
   AccountType,
@@ -17,25 +17,37 @@ interface ParseContext {
   notes: string[]
 }
 
-function asRows(sheet: XLSX.WorkSheet): Matrix {
-  return XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    raw: true,
-    defval: '',
-  }) as Matrix
+type WorkbookSheet = {
+  sheet: string
+  data: Matrix
 }
 
-function isExcelDate(value: unknown): value is number {
-  return typeof value === 'number' && value > 40000 && value < 60000
+function isValidDate(value: unknown): value is Date {
+  return value instanceof Date && !Number.isNaN(value.valueOf())
 }
 
-function excelDateToIso(value: number): string {
-  const parsed = XLSX.SSF.parse_date_code(value)
-  if (!parsed) {
+function isExcelDate(value: unknown): value is number | Date {
+  return isValidDate(value) || (typeof value === 'number' && value > 40000 && value < 60000)
+}
+
+function excelDateToIso(value: number | Date): string {
+  if (isValidDate(value)) {
+    return value.toISOString().slice(0, 10)
+  }
+
+  const wholeDays = Math.floor(value)
+  const fractionalDay = value - wholeDays
+  const adjustedDays = wholeDays > 59 ? wholeDays - 1 : wholeDays
+  const timestamp =
+    Date.UTC(1899, 11, 31) +
+    adjustedDays * 24 * 60 * 60 * 1000 +
+    Math.round(fractionalDay * 24 * 60 * 60 * 1000)
+  const date = new Date(timestamp)
+
+  if (Number.isNaN(date.valueOf())) {
     return new Date().toISOString().slice(0, 10)
   }
 
-  const date = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d))
   return date.toISOString().slice(0, 10)
 }
 
@@ -147,8 +159,15 @@ function makePosition(args: {
     thesis: '',
     plan: '',
     expectedScenario: '',
+    riskNotes: '',
+    exitRule: '',
     reviewResult: '',
     reviewConclusion: '',
+    executionAssessment: '',
+    deviationReason: '',
+    resultAttribution: '',
+    nextAction: '',
+    reviewStatus: 'pending',
     tags: ['Excel 导入'],
     remarks: args.remarks ?? '从固定模板导入',
     importNotes: args.importNotes ?? [],
@@ -384,21 +403,27 @@ function parseMatrixSheet(sheetName: string, rows: Matrix, context: ParseContext
 }
 
 function findLatestSheetDate(rows: Matrix): string {
-  const values: number[] = []
+  let latest: number | Date | null = null
 
   for (let rowIndex = 0; rowIndex < Math.min(4, rows.length); rowIndex += 1) {
     for (const cell of rows[rowIndex] ?? []) {
       if (isExcelDate(cell)) {
-        values.push(cell)
+        if (
+          latest == null ||
+          (isValidDate(cell) ? cell.valueOf() : cell) >
+            (isValidDate(latest) ? latest.valueOf() : latest)
+        ) {
+          latest = cell
+        }
       }
     }
   }
 
-  if (!values.length) {
+  if (latest == null) {
     return new Date().toISOString().slice(0, 10)
   }
 
-  return excelDateToIso(Math.max(...values))
+  return excelDateToIso(latest)
 }
 
 function parseCurrentHoldingsMatrixSheet(
@@ -550,14 +575,12 @@ function parseSummaryNotes(rows: Matrix): string[] {
 }
 
 export async function importWorkbook(file: File): Promise<ExcelImportResult> {
-  const buffer = await file.arrayBuffer()
-  const workbook = XLSX.read(buffer, { type: 'array' })
+  const workbook = (await readXlsxFile(file)) as WorkbookSheet[]
   const context: ParseContext = { warnings: [], notes: [] }
   const positions: StrategyPositionInput[] = []
   const stats: DailyStat[] = []
 
-  for (const sheetName of workbook.SheetNames) {
-    const rows = asRows(workbook.Sheets[sheetName])
+  for (const { sheet: sheetName, data: rows } of workbook) {
 
     if (sheetName === '统计') {
       stats.push(...parseStatsSheet(rows))

@@ -53,6 +53,13 @@ export function buildRealtimeSnapshot(
     underlyingPrice: liveQuote?.underlyingPrice ?? latestSnapshot?.underlyingPrice,
     legMarks: [...marks.entries()].map(([legId, markPrice]) => ({ legId, markPrice })),
     note: liveQuote ? '自动行情估值视图' : latestSnapshot?.note ?? '',
+    audit:
+      latestSnapshot?.audit ?? {
+        sourceType: 'manual',
+        sourceLabel: liveQuote ? '自动行情视图' : '正式估值',
+        lastModifiedAt: latestSnapshot?.createdAt ?? liveQuote?.asOf ?? new Date().toISOString(),
+        lastModifiedType: 'created',
+      },
     createdAt: latestSnapshot?.createdAt ?? liveQuote?.asOf ?? new Date().toISOString(),
   }
 }

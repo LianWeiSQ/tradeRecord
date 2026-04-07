@@ -1,7 +1,9 @@
 import type {
   BackupPayload,
   PositionEventInput,
+  PositionEventUpdateInput,
   PriceSnapshotInput,
+  PriceSnapshotUpdateInput,
   StrategyPosition,
   StrategyPositionInput,
   TradeDataBundle,
@@ -23,7 +25,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const detail = await response.text()
-    throw new Error(detail || `请求失败: ${response.status}`)
+    try {
+      const parsed = JSON.parse(detail) as { error?: { message?: string } }
+      throw new Error(parsed.error?.message || `请求失败: ${response.status}`)
+    } catch {
+      throw new Error(detail || `请求失败: ${response.status}`)
+    }
   }
 
   return (await response.json()) as T
@@ -52,6 +59,19 @@ export async function createTradeEvent(input: PositionEventInput): Promise<void>
   })
 }
 
+export async function updateTradeEvent(eventId: string, input: PositionEventUpdateInput): Promise<void> {
+  await request<{ ok: boolean }>(`/api/trades/events/${eventId}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteTradeEvent(eventId: string): Promise<void> {
+  await request<{ ok: boolean }>(`/api/trades/events/${eventId}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function createTradeSnapshot(input: PriceSnapshotInput): Promise<void> {
   await request<{ ok: boolean }>('/api/trades/snapshots', {
     method: 'POST',
@@ -59,11 +79,40 @@ export async function createTradeSnapshot(input: PriceSnapshotInput): Promise<vo
   })
 }
 
+export async function updateTradeSnapshot(
+  snapshotId: string,
+  input: PriceSnapshotUpdateInput,
+): Promise<void> {
+  await request<{ ok: boolean }>(`/api/trades/snapshots/${snapshotId}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteTradeSnapshot(snapshotId: string): Promise<void> {
+  await request<{ ok: boolean }>(`/api/trades/snapshots/${snapshotId}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function updateTradeReview(
   positionId: string,
   fields: Pick<
     StrategyPosition,
-    'thesis' | 'plan' | 'expectedScenario' | 'reviewResult' | 'reviewConclusion' | 'remarks' | 'tags'
+    | 'thesis'
+    | 'plan'
+    | 'expectedScenario'
+    | 'riskNotes'
+    | 'exitRule'
+    | 'reviewResult'
+    | 'reviewConclusion'
+    | 'executionAssessment'
+    | 'deviationReason'
+    | 'resultAttribution'
+    | 'nextAction'
+    | 'reviewStatus'
+    | 'remarks'
+    | 'tags'
   >,
 ): Promise<void> {
   await request<{ ok: boolean }>(`/api/trades/reviews/${positionId}`, {
