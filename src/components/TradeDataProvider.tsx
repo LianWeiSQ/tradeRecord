@@ -15,7 +15,6 @@ import {
   deleteTradeSnapshot,
   exportTradeBackup,
   fetchTradeBundle,
-  importTradeBatch,
   restoreTradeBackup,
   updateTradeEvent,
   updateTradeReview,
@@ -64,7 +63,6 @@ interface TradeDataContextValue {
       | 'tags'
     >,
   ) => Promise<void>
-  saveImportBatch: (inputs: StrategyPositionInput[], stats: TradeDataBundle['stats']) => Promise<void>
   exportBackup: () => Promise<BackupPayload>
   restoreBackup: (payload: BackupPayload) => Promise<void>
   clearAllData: () => Promise<void>
@@ -161,11 +159,6 @@ export function TradeDataProvider({ children }: PropsWithChildren) {
     await refreshData()
   }
 
-  async function saveImport(inputs: StrategyPositionInput[], stats: TradeDataBundle['stats']) {
-    await importTradeBatch({ positions: inputs, stats })
-    await refreshData()
-  }
-
   async function restoreBackup(payload: BackupPayload) {
     await restoreTradeBackup(payload)
     await refreshData()
@@ -190,7 +183,6 @@ export function TradeDataProvider({ children }: PropsWithChildren) {
       editSnapshot,
       removeSnapshot,
       updateReview: saveReview,
-      saveImportBatch: saveImport,
       exportBackup: exportTradeBackup,
       restoreBackup,
       clearAllData,

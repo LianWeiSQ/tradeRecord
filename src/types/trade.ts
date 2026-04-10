@@ -246,13 +246,6 @@ export interface PendingCloseSnapshotPayload {
   snapshot: PriceSnapshotInput
 }
 
-export interface ExcelImportResult {
-  positions: StrategyPositionInput[]
-  stats: DailyStat[]
-  importWarnings: string[]
-  importNotes: string[]
-}
-
 export interface BackupPayload {
   version: 1
   exportedAt: string
@@ -296,70 +289,6 @@ export interface DashboardPositionView {
   latestSnapshot?: PriceSnapshot
   metrics: PositionMetrics
   nearestExpiryDays?: number
-}
-
-export interface DashboardGroupView {
-  accountType: AccountType
-  product: string
-  positions: DashboardPositionView[]
-  openCount: number
-  totalUnrealizedPnl: number
-  totalRealizedPnl: number
-  nearestExpiryDays?: number
-  latestSnapshotAt?: string
-}
-
-export interface DashboardFilterState {
-  accountType: AccountType | 'all'
-  product: string | 'all'
-  status: PositionStatus | 'all'
-  range: 'all' | '30d' | '90d'
-  search: string
-}
-
-export interface DashboardOverviewView {
-  openCount: number
-  totalUnrealizedPnl: number
-  totalRealizedPnl: number
-  totalGroups: number
-  latestSnapshotAt?: string
-}
-
-export interface RecentActivityView {
-  id: string
-  type: 'open' | 'event' | 'valuation'
-  title: string
-  subtitle: string
-  occurredAt: string
-  amountLabel?: string
-}
-
-export interface ReviewFilterState {
-  accountType: AccountType | 'all'
-  product: string | 'all'
-  reviewStatus: ReviewStatus | 'all'
-  range: 'all' | '30d' | '90d'
-  search: string
-}
-
-export interface ReviewStatsView {
-  totalClosed: number
-  reviewedCount: number
-  pendingCount: number
-  winRate: number
-  averageHoldingDays: number
-  bestPnl: number
-  worstPnl: number
-}
-
-export interface WorkItemView {
-  id: string
-  positionId: string
-  kind: 'review' | 'valuation' | 'expiry' | 'stale' | 'data_issue'
-  title: string
-  detail: string
-  priority: 'high' | 'medium' | 'low'
-  dueLabel?: string
 }
 
 export interface NavigationItem {

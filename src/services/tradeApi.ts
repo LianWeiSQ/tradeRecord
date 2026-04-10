@@ -121,13 +121,6 @@ export async function updateTradeReview(
   })
 }
 
-export async function importTradeBatch(payload: Pick<TradeDataBundle, 'stats'> & { positions: StrategyPositionInput[] }): Promise<void> {
-  await request<{ ok: boolean }>('/api/trades/import', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
 export async function exportTradeBackup(): Promise<BackupPayload> {
   return request<BackupPayload>('/api/trades/backup', { method: 'GET' })
 }

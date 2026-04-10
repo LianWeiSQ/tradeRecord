@@ -2,7 +2,7 @@
   "cached_quotes": [
     {
       "positionId": "3c2b0abe-f4c6-482e-ac08-4116b859bd69",
-      "asOf": "2026-04-07T18:43:32",
+      "asOf": "2026-04-09T02:46:24",
       "underlyingPrice": null,
       "legQuotes": [
         {
@@ -19,6 +19,6 @@
       "message": "行情源未返回该合约价格"
     }
   ],
-  "last_refresh_at": "2026-04-07T18:43:32",
-  "last_close_snapshot_date": "2026-04-07"
+  "last_refresh_at": "2026-04-09T02:46:24",
+  "last_close_snapshot_date": "2026-04-08"
 }

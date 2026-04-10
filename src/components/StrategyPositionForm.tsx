@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { usePersistentState } from '../hooks/usePersistentState'
 import { ACCOUNTS } from '../types/trade'
 import type { ReviewStatus, StrategyLegInput, StrategyPositionInput } from '../types/trade'
 
@@ -7,12 +8,34 @@ interface StrategyPositionFormProps {
   submitting?: boolean
 }
 
+interface StrategyPositionFormDraft {
+  accountType: 'live' | 'paper'
+  product: string
+  underlyingSymbol: string
+  strategyName: string
+  openedAt: string
+  showAdvancedFields?: boolean
+  showPlanningFields?: boolean
+  thesis: string
+  plan: string
+  expectedScenario: string
+  riskNotes: string
+  exitRule: string
+  remarks: string
+  tags: string
+  legs: StrategyLegInput[]
+}
+
+const FORM_DRAFT_STORAGE_KEY = 'trade-record:new-position:draft'
+const DEFAULT_TAGS = '手动录入'
+
 function today() {
   return new Date().toISOString().slice(0, 10)
 }
 
 function createEmptyLeg(): StrategyLegInput {
   return {
+    id: crypto.randomUUID(),
     instrumentType: 'option',
     side: 'long',
     contractCode: '',
@@ -30,23 +53,69 @@ function emptyReviewStatus(): ReviewStatus {
   return 'pending'
 }
 
+function createEmptyDraft(): StrategyPositionFormDraft {
+  return {
+    accountType: 'live',
+    product: '',
+    underlyingSymbol: '',
+    strategyName: '',
+    openedAt: today(),
+    showAdvancedFields: false,
+    thesis: '',
+    plan: '',
+    expectedScenario: '',
+    riskNotes: '',
+    exitRule: '',
+    remarks: '',
+    tags: DEFAULT_TAGS,
+    legs: [createEmptyLeg()],
+  }
+}
+
+function hasAdvancedContent(
+  draft: Pick<
+    StrategyPositionFormDraft,
+    'thesis' | 'plan' | 'expectedScenario' | 'riskNotes' | 'exitRule' | 'remarks' | 'tags'
+  >,
+) {
+  return Boolean(
+    draft.thesis.trim() ||
+      draft.plan.trim() ||
+      draft.expectedScenario.trim() ||
+      draft.riskNotes.trim() ||
+      draft.exitRule.trim() ||
+      draft.remarks.trim() ||
+      draft.tags.trim() !== DEFAULT_TAGS,
+  )
+}
+
 export function StrategyPositionForm({
   onSubmit,
   submitting = false,
 }: StrategyPositionFormProps) {
-  const [accountType, setAccountType] = useState<'live' | 'paper'>('live')
-  const [product, setProduct] = useState('')
-  const [underlyingSymbol, setUnderlyingSymbol] = useState('')
-  const [strategyName, setStrategyName] = useState('')
-  const [openedAt, setOpenedAt] = useState(today())
-  const [thesis, setThesis] = useState('')
-  const [plan, setPlan] = useState('')
-  const [expectedScenario, setExpectedScenario] = useState('')
-  const [riskNotes, setRiskNotes] = useState('')
-  const [exitRule, setExitRule] = useState('')
-  const [remarks, setRemarks] = useState('')
-  const [tags, setTags] = useState('手动录入')
-  const [legs, setLegs] = useState<StrategyLegInput[]>([createEmptyLeg()])
+  const [persistedDraft, setPersistedDraft] = usePersistentState<StrategyPositionFormDraft>(
+    FORM_DRAFT_STORAGE_KEY,
+    createEmptyDraft,
+    'session',
+  )
+  const [accountType, setAccountType] = useState<'live' | 'paper'>(persistedDraft.accountType)
+  const [product, setProduct] = useState(persistedDraft.product)
+  const [underlyingSymbol, setUnderlyingSymbol] = useState(persistedDraft.underlyingSymbol)
+  const [strategyName, setStrategyName] = useState(persistedDraft.strategyName)
+  const [openedAt, setOpenedAt] = useState(persistedDraft.openedAt)
+  const [showAdvancedFields, setShowAdvancedFields] = useState(
+    persistedDraft.showAdvancedFields ??
+      persistedDraft.showPlanningFields ??
+      hasAdvancedContent(persistedDraft),
+  )
+  const [thesis, setThesis] = useState(persistedDraft.thesis)
+  const [plan, setPlan] = useState(persistedDraft.plan)
+  const [expectedScenario, setExpectedScenario] = useState(persistedDraft.expectedScenario)
+  const [riskNotes, setRiskNotes] = useState(persistedDraft.riskNotes)
+  const [exitRule, setExitRule] = useState(persistedDraft.exitRule)
+  const [remarks, setRemarks] = useState(persistedDraft.remarks)
+  const [tags, setTags] = useState(persistedDraft.tags)
+  const [legs, setLegs] = useState<StrategyLegInput[]>(persistedDraft.legs)
 
   const canSubmit = useMemo(
     () =>
@@ -68,6 +137,41 @@ export function StrategyPositionForm({
       current.map((leg, currentIndex) => (currentIndex === index ? { ...leg, ...patch } : leg)),
     )
   }
+
+  useEffect(() => {
+    setPersistedDraft({
+      accountType,
+      product,
+      underlyingSymbol,
+      strategyName,
+      openedAt,
+      showAdvancedFields,
+      thesis,
+      plan,
+      expectedScenario,
+      riskNotes,
+      exitRule,
+      remarks,
+      tags,
+      legs,
+    })
+  }, [
+    accountType,
+    exitRule,
+    expectedScenario,
+    legs,
+    openedAt,
+    plan,
+    product,
+    remarks,
+    riskNotes,
+    setPersistedDraft,
+    showAdvancedFields,
+    strategyName,
+    tags,
+    thesis,
+    underlyingSymbol,
+  ])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -99,14 +203,20 @@ export function StrategyPositionForm({
         .map((tag) => tag.trim())
         .filter(Boolean),
       remarks: remarks.trim(),
-      legs: legs.map((leg) => ({
-        ...leg,
-        contractCode: leg.contractCode.trim(),
-        expiryDate: leg.expiryDate || undefined,
-        strikePrice: leg.strikePrice || undefined,
-        note: leg.note?.trim() || '',
-      })),
+      legs: legs.map((leg) => {
+        const { id: _draftId, ...payload } = leg
+
+        return {
+          ...payload,
+          contractCode: leg.contractCode.trim(),
+          expiryDate: leg.expiryDate || undefined,
+          strikePrice: leg.strikePrice || undefined,
+          note: leg.note?.trim() || '',
+        }
+      }),
     })
+
+    setPersistedDraft(createEmptyDraft())
   }
 
   return (
@@ -114,7 +224,7 @@ export function StrategyPositionForm({
       <div className="section-head">
         <div>
           <h3>开仓基础信息</h3>
-          <p>开仓时把交易计划录完整，后续事件、估值和复盘都围绕这条记录继续维护。</p>
+          <p>默认只显示开仓必填字段，先完成基础录入。</p>
         </div>
       </div>
 
@@ -177,85 +287,6 @@ export function StrategyPositionForm({
             onChange={(event) => setOpenedAt(event.target.value)}
           />
         </div>
-
-        <div className="field">
-          <label htmlFor="tags">标签</label>
-          <input
-            id="tags"
-            placeholder="逗号分隔，例如: 趋势, 套保"
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="section-head">
-        <div>
-          <h3>交易计划</h3>
-          <p>这些字段决定后续复盘能否闭环，宁可简洁，也不要留空到收尾时再补。</p>
-        </div>
-      </div>
-
-      <div className="form-grid">
-        <div className="field field--wide">
-          <label htmlFor="thesis">交易 thesis</label>
-          <textarea
-            id="thesis"
-            placeholder="这笔交易的核心判断是什么"
-            value={thesis}
-            onChange={(event) => setThesis(event.target.value)}
-          />
-        </div>
-
-        <div className="field field--wide">
-          <label htmlFor="plan">执行计划</label>
-          <textarea
-            id="plan"
-            placeholder="准备怎么建仓、加减仓、观察什么信号"
-            value={plan}
-            onChange={(event) => setPlan(event.target.value)}
-          />
-        </div>
-
-        <div className="field field--wide">
-          <label htmlFor="expectedScenario">预期场景</label>
-          <textarea
-            id="expectedScenario"
-            placeholder="理想走势、时间窗口和关键路径"
-            value={expectedScenario}
-            onChange={(event) => setExpectedScenario(event.target.value)}
-          />
-        </div>
-
-        <div className="field field--wide">
-          <label htmlFor="riskNotes">风险点</label>
-          <textarea
-            id="riskNotes"
-            placeholder="最担心什么，哪些条件会否定原始判断"
-            value={riskNotes}
-            onChange={(event) => setRiskNotes(event.target.value)}
-          />
-        </div>
-
-        <div className="field field--wide">
-          <label htmlFor="exitRule">退出条件</label>
-          <textarea
-            id="exitRule"
-            placeholder="止盈、止损、时间止损或结构调整规则"
-            value={exitRule}
-            onChange={(event) => setExitRule(event.target.value)}
-          />
-        </div>
-
-        <div className="field field--wide">
-          <label htmlFor="remarks">备注</label>
-          <textarea
-            id="remarks"
-            placeholder="补充背景、盘前计划、新闻事件等"
-            value={remarks}
-            onChange={(event) => setRemarks(event.target.value)}
-          />
-        </div>
       </div>
 
       <div className="section-head">
@@ -274,7 +305,7 @@ export function StrategyPositionForm({
 
       <div className="list-stack">
         {legs.map((leg, index) => (
-          <div className="leg-editor" key={`${leg.contractCode}-${index}`}>
+          <div className="leg-editor" key={leg.id ?? `draft-leg-${index}`}>
             <div className="leg-editor__header">
               <div>
                 <strong>持仓明细 {index + 1}</strong>
@@ -409,7 +440,7 @@ export function StrategyPositionForm({
               ) : null}
 
               <div className="field field--wide">
-                <label>备注</label>
+                <label>腿备注</label>
                 <input
                   placeholder="这条腿的补充说明"
                   value={leg.note ?? ''}
@@ -420,6 +451,99 @@ export function StrategyPositionForm({
           </div>
         ))}
       </div>
+
+      <div className="section-head">
+        <div>
+          <h3>高级记录</h3>
+          <p>标签、备注和交易计划都收在这里，想记时再展开。</p>
+        </div>
+        <button
+          className="btn btn--secondary"
+          type="button"
+          onClick={() => setShowAdvancedFields((current) => !current)}
+        >
+          {showAdvancedFields ? '收起高级记录' : '展开高级记录'}
+        </button>
+      </div>
+
+      {showAdvancedFields ? (
+        <div className="form-grid">
+          <div className="field field--wide">
+            <label htmlFor="tags">标签</label>
+            <input
+              id="tags"
+              placeholder="逗号分隔，例如: 趋势, 套保"
+              value={tags}
+              onChange={(event) => setTags(event.target.value)}
+            />
+          </div>
+
+          <div className="field field--wide">
+            <label htmlFor="remarks">备注</label>
+            <textarea
+              id="remarks"
+              placeholder="补充背景、盘前计划、新闻事件等"
+              value={remarks}
+              onChange={(event) => setRemarks(event.target.value)}
+            />
+          </div>
+
+          <div className="field field--wide">
+            <label htmlFor="thesis">交易 thesis</label>
+            <textarea
+              id="thesis"
+              placeholder="这笔交易的核心判断是什么"
+              value={thesis}
+              onChange={(event) => setThesis(event.target.value)}
+            />
+          </div>
+
+          <div className="field field--wide">
+            <label htmlFor="plan">执行计划</label>
+            <textarea
+              id="plan"
+              placeholder="准备怎么建仓、加减仓、观察什么信号"
+              value={plan}
+              onChange={(event) => setPlan(event.target.value)}
+            />
+          </div>
+
+          <div className="field field--wide">
+            <label htmlFor="expectedScenario">预期场景</label>
+            <textarea
+              id="expectedScenario"
+              placeholder="理想走势、时间窗口和关键路径"
+              value={expectedScenario}
+              onChange={(event) => setExpectedScenario(event.target.value)}
+            />
+          </div>
+
+          <div className="field field--wide">
+            <label htmlFor="riskNotes">风险点</label>
+            <textarea
+              id="riskNotes"
+              placeholder="最担心什么，哪些条件会否定原始判断"
+              value={riskNotes}
+              onChange={(event) => setRiskNotes(event.target.value)}
+            />
+          </div>
+
+          <div className="field field--wide">
+            <label htmlFor="exitRule">退出条件</label>
+            <textarea
+              id="exitRule"
+              placeholder="止盈、止损、时间止损或结构调整规则"
+              value={exitRule}
+              onChange={(event) => setExitRule(event.target.value)}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="kv-block">
+          <span>可选说明</span>
+          <strong>默认只展示基础信息和持仓明细；标签、备注和交易计划需要时再展开。</strong>
+        </div>
+      )}
 
       <div className="form-actions">
         <button className="btn" disabled={!canSubmit || submitting} type="submit">

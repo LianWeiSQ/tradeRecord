@@ -14,7 +14,6 @@ from fastapi.responses import JSONResponse
 from .errors import AppError
 from .schemas import (
     BackupPayload,
-    ExcelImportPayload,
     PositionEventUpdateInput,
     PriceSnapshotUpdateInput,
     QuotePositionPayload,
@@ -37,7 +36,6 @@ from .storage import (
     now_iso,
     restore_backup_payload,
     save_close_snapshot_with_signature,
-    save_import_batch,
     save_price_snapshot,
     update_position_event,
     update_price_snapshot,
@@ -409,12 +407,6 @@ def remove_snapshot(snapshot_id: str) -> dict[str, bool]:
 @app.put("/api/trades/reviews/{position_id}")
 def save_review(position_id: str, review: ReviewUpdateInput) -> dict[str, bool]:
     update_position_review(position_id, review)
-    return {"ok": True}
-
-
-@app.post("/api/trades/import")
-def import_batch(payload: ExcelImportPayload) -> dict[str, bool]:
-    save_import_batch(payload.positions, payload.stats)
     return {"ok": True}
 
 

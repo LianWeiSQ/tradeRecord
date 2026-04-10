@@ -1,56 +1,33 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useLiveQuotes } from './LiveQuotesProvider'
+import { usePersistentState } from '../hooks/usePersistentState'
 import { formatDateTime } from '../services/format'
 import type { NavigationItem } from '../types/trade'
 
 const navigationItems: NavigationItem[] = [
-  { to: '/', label: '首页', shortLabel: '首页', icon: 'DB' },
+  { to: '/', label: '持仓列表', shortLabel: '列表', icon: 'PL' },
   { to: '/positions/new', label: '开仓', shortLabel: '开仓', icon: 'OP' },
-  { to: '/reviews', label: '复盘', shortLabel: '复盘', icon: 'RV' },
-  { to: '/valuations', label: '估值', shortLabel: '估值', icon: 'MT' },
-  { to: '/import', label: '导入', shortLabel: '导入', icon: 'IM' },
 ]
 
 function pageMeta(pathname: string) {
   if (pathname.startsWith('/positions/new')) {
     return {
       title: '开仓',
-      description: '只记录建立一笔交易所需的最小信息，后续变化都回到详情页继续维护。',
+      description: '记录建立一笔交易所需的最小信息，后续变化都回到详情页继续维护。',
     }
   }
 
   if (pathname.startsWith('/positions/')) {
     return {
       title: '交易详情',
-      description: '集中处理持仓明细、仓位事件、自动行情、正式估值与复盘。',
-    }
-  }
-
-  if (pathname.startsWith('/valuations')) {
-    return {
-      title: '估值',
-      description: '自动读取期货与标的行情，期权继续手动补录，并保存正式估值快照。',
-    }
-  }
-
-  if (pathname.startsWith('/reviews')) {
-    return {
-      title: '复盘工作台',
-      description: '集中处理待复盘队列，补齐交易计划、执行偏差、结果归因和下次规则。',
-    }
-  }
-
-  if (pathname.startsWith('/import')) {
-    return {
-      title: 'Excel 导入',
-      description: '按固定模板导入历史记录，先解析预览，再保存到 Python 后端。',
+      description: '集中处理持仓明细、仓位事件、行情估值与复盘。',
     }
   }
 
   return {
-    title: '交易工作台',
-    description: '围绕当前持仓、实时收益、正式估值和后续管理来组织你的日常记录。',
+    title: '持仓列表',
+    description: '查看所有持仓记录，点击进入详情管理。',
   }
 }
 
@@ -68,7 +45,10 @@ function formatHealthLabel(status: 'ok' | 'degraded' | 'offline') {
 
 export function AppLayout() {
   const location = useLocation()
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = usePersistentState(
+    'trade-record:layout:sidebar-collapsed',
+    false,
+  )
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const { health, lastSynchronizedAt } = useLiveQuotes()
 
@@ -87,7 +67,7 @@ export function AppLayout() {
             <div className="sidebar-brand__mark">TR</div>
             <div className="sidebar-brand__text">
               <strong>Trade Record</strong>
-              <span>Python 后端版工作台</span>
+              <span>持仓记录工具</span>
             </div>
           </Link>
           <button
@@ -170,10 +150,7 @@ export function AppLayout() {
             </div>
             <div className="toolbar-actions">
               <Link className="btn btn--secondary" to={primaryAction}>
-                {location.pathname === '/' ? '去开仓' : '返回首页'}
-              </Link>
-              <Link className="btn" to={location.pathname === '/reviews' ? '/valuations' : '/reviews'}>
-                {location.pathname === '/reviews' ? '去估值' : '去复盘'}
+                {location.pathname === '/' ? '去开仓' : '返回列表'}
               </Link>
             </div>
           </div>
